@@ -5,6 +5,7 @@ import br.com.gomestg.libraryapi.exception.LibraryBusinessException;
 import br.com.gomestg.libraryapi.model.entity.Book;
 import br.com.gomestg.libraryapi.service.BookService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -21,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
+import java.util.Arrays;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -175,14 +180,15 @@ public class BookControllerTest {
 
     @Test
     @DisplayName("update a book : successfully")
-    public void updateBookTest() throws Exception{
+    public void updateBookTest() throws Exception {
         Long id = 10l;
         String json = new ObjectMapper().writeValueAsString(createNewBook());
 
         Book updatingBook = Book.builder().id(id).title("Some Book").author("Anyone").isbn("U4321").build();
         BDDMockito.given(service.getById(id)).willReturn(Optional.of(updatingBook));
 
-        Book updatedBook = Book.builder().id(id).title("Cassino Royale").author("Ian Fleming").isbn("U1234").build();;
+        Book updatedBook = Book.builder().id(id).title("Cassino Royale").author("Ian Fleming").isbn("U1234").build();
+        ;
         BDDMockito.given(service.update(updatingBook)).willReturn(updatedBook);
 
         MockHttpServletRequestBuilder request = MockMvcRequestBuilders
@@ -201,7 +207,7 @@ public class BookControllerTest {
 
     @Test
     @DisplayName("update a book not found or not exists : error validation")
-    public void updateNonexistentBookTest() throws Exception{
+    public void updateNonexistentBookTest() throws Exception {
         String json = new ObjectMapper().writeValueAsString(createNewBook());
         BDDMockito.given(service.getById(anyLong())).willReturn(Optional.empty());
 
@@ -213,6 +219,33 @@ public class BookControllerTest {
 
         mock.perform(request)
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("find books : successfully")
+    public void findBooksTest() throws Exception{
+        Long id = 10l;
+        Book book = Book.builder()
+                .id(id)
+                .title(createNewBook().getTitle())
+                .author(createNewBook().getAuthor())
+                .isbn(createNewBook().getIsbn())
+                .build();
+
+        BDDMockito.given(service.find(Mockito.any(Book.class), Mockito.any(Pageable.class)))
+                .willReturn(new PageImpl<Book>(Arrays.asList(book), PageRequest.of(0, 100), 1));
+
+        String query = String.format("?title=%s&author%s&page=0&size=100", book.getTitle(), book.getAuthor());
+
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders.get(URL.concat(query))
+                .accept(MediaType.APPLICATION_JSON);
+
+        mock.perform(request)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("content", Matchers.hasSize(1)))
+                .andExpect(jsonPath("totalElements").value(1))
+                .andExpect(jsonPath("pageable.pageSize").value(100))
+                .andExpect(jsonPath("pageable.pageNumber").value(0));
     }
 
     private BookDTO createNewBook() {
